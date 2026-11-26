@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>服务端时间测试 · Hono Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="logo">H</span>
+      <span class="brand">Hono Lab</span>
+      <span class="tag">/api/time</span>
+      <nav>
+        <a href="/">首页</a>
+        <a href="/websocket">WebSocket</a>
+        <a href="/time" aria-current="page">服务端时间</a>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <section class="hero" style="padding: 34px 0 4px">
+        <span class="eyebrow"><i class="dot"></i>NTP 式四时间戳 · 取最短往返</span>
+        <h1 style="font-size: clamp(24px, 3.4vw, 32px)">服务端时间 <span>偏移测量</span></h1>
+        <p>多次请求 <code class="mono">/api/time</code>，按 t0 / 服务器 t / t3 推算时钟偏差，然后沿用这个偏差跑一块服务器秒表。</p>
+      </section>
+
+      <div class="status">
+        <span class="pill" id="syncState"><i class="dot"></i>未校准</span>
+        <span class="mono dim" id="serverTz">tz —</span>
+        <label class="switch" style="margin-left: auto">
+          <input type="checkbox" id="autoSync" checked />
+          每 5s 自动重校
+        </label>
+        <button class="btn primary" id="calibrate">重新校准（7 次采样）</button>
+      </div>
+
+      <div class="clock">
+        <div class="label">服务器当前时间（按估算偏移推算）</div>
+        <div class="value" id="clock">—</div>
+        <div class="sub" id="clockSub">等待首次校准…</div>
+      </div>
+
+      <div class="grid cols-3" style="margin-top: 14px">
+        <div class="stat"><label>估算偏差（服务器 − 本机）</label><b id="statOffset" style="font-size: 20px">—</b></div>
+        <div class="stat"><label>最小往返</label><b id="statRtt">—<small>ms</small></b></div>
+        <div class="stat"><label>采样本机时间</label><b id="statLocal" style="font-size: 17px">—</b></div>
+      </div>
+
+      <div class="card" style="margin-top: 14px">
+        <h3>采样明细 <span class="muted mono" style="font-weight: 400">t0 / tServer / t3 单位均为本机毫秒</span></h3>
+        <div style="overflow: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>t0</th>
+                <th>tServer</th>
+                <th>t3</th>
+                <th>往返</th>
+                <th>偏差</th>
+              </tr>
+            </thead>
+            <tbody id="samples">
+              <tr><td colspan="6" class="dim" style="text-align: left">还没有样本，点上面的校准按钮</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <section class="notes">
+        <h3>偏差是怎么算的</h3>
+        <p>
+          一次请求能拿到三个时刻：本机发出前 <code>t0</code>、服务器处理时的时间戳 <code>tS</code>、本机收到响应后 <code>t3</code>。
+          假设去程回程各占一半，服务器相对本机的偏差就是 <code>tS − (t0 + t3) / 2</code>。往返越长误差越大，所以采多次后取 <code>t3 − t0</code> 最小的那一次——它最接近"零延迟"的理想值。
+        </p>
+      </section>
+
+      <p class="footer">Hono · GET /api/time（响应头带 x-server-time）</p>
+    </main>
+
+    <script src="/time.js"></script>
+  </body>
+</html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hono Lab · WebSocket 与时间测试台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="logo">H</span>
+      <span class="brand">Hono Lab</span>
+      <span class="tag">hono · node</span>
+      <nav>
+        <a href="/" aria-current="page">首页</a>
+        <a href="/websocket">WebSocket</a>
+        <a href="/time">服务端时间</a>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <section class="hero">
+        <span class="eyebrow"><i class="dot"></i>同一台服务器，两个诊断工具</span>
+        <h1>用最直接的方式<br /><span>验证连接与时钟</span></h1>
+        <p>
+          一个测 WebSocket：握手、回声、二进制帧、服务端主动推送。一个测时间：用 NTP 式的四时间戳估算服务器时钟偏移与本机偏差。
+        </p>
+      </section>
+
+      <div class="grid cols-2">
+        <a class="card link" href="/websocket">
+          <h2>WebSocket 测试 <span class="arrow">→</span></h2>
+          <p class="muted">
+            连接 <code class="mono">/ws</code>，发文本、发二进制、连发压测，实时看到回包延迟与服务端每秒推送。
+          </p>
+          <p class="muted mono" style="margin-top: 10px; color: #7dd3fc">ws://127.0.0.1:3100/ws</p>
+        </a>
+
+        <a class="card link" href="/time">
+          <h2>服务端时间测试 <span class="arrow">→</span></h2>
+          <p class="muted">
+            多次采样 <code class="mono">/api/time</code>，取往返最短的一次推算偏移，然后按偏移走的秒表看服务器当前时间。
+          </p>
+          <p class="muted mono" style="margin-top: 10px; color: #7dd3fc">GET /api/time</p>
+        </a>
+      </div>
+
+      <div class="status">
+        <span class="pill" id="info-node">node —</span>
+        <span class="pill" id="info-port">port —</span>
+        <span class="pill" id="info-tz">tz —</span>
+        <span class="pill" id="info-up">uptime —</span>
+        <span class="mono dim" id="info-clock"></span>
+      </div>
+
+      <section class="notes">
+        <h3>这两个接口做什么</h3>
+        <p>
+          <code>GET /api/time</code> 返回服务器毫秒时间戳、ISO 字符串、时区与进程运行时长，同时带 <code>x-server-time</code> 响应头；
+          <code>GET /api/info</code> 返回 Node 版本与进程信息；<code>GET /ws</code> 是 WebSocket 端点，收到 <code>{"type":"ping"}</code> 回 <code>pong</code>，其余文本原样回声，二进制帧原样回显。
+        </p>
+      </section>
+
+      <p class="footer">Hono + @hono/node-server + @hono/node-ws · 无前端构建步骤</p>
+    </main>
+
+    <script>
+      const fmtDur = (ms) => {
+        const s = Math.floor(ms / 1000);
+        return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m ${String(s % 60).padStart(2, '0')}s`;
+      };
+
+      fetch('/api/info', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((info) => {
+          document.getElementById('info-node').textContent = info.node;
+          document.getElementById('info-port').textContent = `port ${info.port}`;
+          document.getElementById('info-tz').textContent = info.tz;
+          document.getElementById('info-up').textContent = `uptime ${fmtDur(info.uptimeMs)}`;
+          document.getElementById('info-clock').textContent = new Date(info.clock).toLocaleString('zh-CN', { hour12: false });
+        })
+        .catch(() => {
+          document.getElementById('info-node').textContent = '服务不可达';
+        });
+    </script>
+  </body>
+</html>

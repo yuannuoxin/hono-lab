@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebSocket 测试 · Hono Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="logo">H</span>
+      <span class="brand">Hono Lab</span>
+      <span class="tag">/ws</span>
+      <nav>
+        <a href="/">首页</a>
+        <a href="/websocket" aria-current="page">WebSocket</a>
+        <a href="/time">服务端时间</a>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <section class="hero" style="padding: 34px 0 4px">
+        <span class="eyebrow"><i class="dot"></i>Echo · Ping · Binary · Push</span>
+        <h1 style="font-size: clamp(24px, 3.4vw, 32px)">WebSocket <span>回声测试</span></h1>
+        <p>文本原样回声，<code class="mono">ping</code> 回 <code class="mono">pong</code> 并带回发送时刻，二进制帧原样回显。服务端每秒推送一次自身时间。</p>
+      </section>
+
+      <div class="status">
+        <span class="pill" id="state"><i class="dot"></i>未连接</span>
+        <span class="mono dim" id="endpoint">—</span>
+        <label class="switch" style="margin-left: auto">
+          <input type="checkbox" id="autoReconnect" checked />
+          自动重连
+        </label>
+        <button class="btn" id="toggle">连接</button>
+      </div>
+
+      <div class="grid cols-3" style="margin-top: 14px">
+        <div class="stat"><label>已发送</label><b id="statSent">0</b></div>
+        <div class="stat"><label>已接收</label><b id="statRecv">0</b></div>
+        <div class="stat"><label>平均 RTT</label><b id="statRtt">—<small>ms</small></b></div>
+        <div class="stat"><label>RTT 区间</label><b id="statRange" style="font-size: 17px">—</b></div>
+        <div class="stat"><label>在线时长</label><b id="statUp" style="font-size: 17px">—</b></div>
+        <div class="stat"><label>服务端连接数</label><b id="statClients">—</b></div>
+      </div>
+
+      <div class="card" style="margin-top: 14px">
+        <div class="row">
+          <input type="text" id="textInput" value="hello hono" spellcheck="false" />
+          <button class="btn primary" id="sendText">发送文本</button>
+          <button class="btn" id="sendBinary">发送二进制 32B</button>
+          <button class="btn" id="burst">连发 20 次 ping</button>
+          <button class="btn" id="clear">清空日志</button>
+        </div>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+
+      <section class="notes">
+        <h3>怎么读这页</h3>
+        <p>
+          <code>平均 RTT</code> 只统计 ping/pong，用发送时刻和收到 pong 的本地时刻相减；<code>hello</code> 里的服务器时间可以直接和本机时间对比。
+          服务端每秒推 <code>{"type":"tick"}</code>，日志里出现的 <code>← tick</code> 就说明服务端主动下发链路是通的。
+        </p>
+      </section>
+
+      <p class="footer">Hono + @hono/node-ws · 端点 ws://127.0.0.1:3100/ws</p>
+    </main>
+
+    <script src="/ws.js"></script>
+  </body>
+</html>

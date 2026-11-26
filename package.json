@@ -1,0 +1,16 @@
+{
+  "name": "hono-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono 实验台：WebSocket 回声测试 + 服务端时间偏移测量",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.6",
+    "@hono/node-ws": "^1.3.2",
+    "hono": "^4.10.4"
+  }
+}
