@@ -219,6 +219,38 @@ body {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* 分段选择 */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 500 12px/1 var(--mono);
+  padding: 6px 11px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: 0.16s;
+}
+
+.seg button:hover {
+  color: var(--text);
+}
+
+.seg button.on {
+  background: linear-gradient(100deg, var(--cyan), var(--indigo));
+  color: #05070d;
+  font-weight: 650;
+}
+
 .url-field {
   flex: 1 1 260px;
   min-width: 200px;

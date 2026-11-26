@@ -76,6 +76,28 @@ app.get('/api/time', (c) => {
   });
 });
 
+// 给时间页的 SSE 通道用：每个连接自己的快节拍推送，不参与 /api/sse 的广播
+app.get('/api/time/sse', (c) => {
+  c.header('cache-control', 'no-cache, no-transform');
+  c.header('x-accel-buffering', 'no');
+
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({ event: 'hello', retry: 1000, data: JSON.stringify({ t: Date.now() }) });
+
+    while (true) {
+      await stream.sleep(80);
+      await stream.writeSSE({
+        event: 'tick',
+        data: JSON.stringify({
+          t: Date.now(),
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offsetMinutes: -new Date().getTimezoneOffset(),
+        }),
+      });
+    }
+  });
+});
+
 app.get('/api/info', (c) =>
   c.json({
     node: process.version,
@@ -135,6 +157,22 @@ app.get(
           payload = JSON.parse(event.data);
         } catch {
           /* 非 JSON 文本，走普通回声 */
+        }
+
+        if (payload?.type === 'time') {
+          // 时间页的 WebSocket 通道：把收到时刻和 t0 一起带回，客户端算 offset
+          const tS = Date.now();
+          ws.send(
+            JSON.stringify({
+              type: 'time',
+              id: payload.id,
+              t0: payload.t0,
+              tS,
+              tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              offsetMinutes: -new Date(tS).getTimezoneOffset(),
+            }),
+          );
+          return;
         }
 
         if (payload?.type === 'ping') {

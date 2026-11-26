@@ -41,6 +41,28 @@ app.get('/api/time', (c) => {
   });
 });
 
+// 时间页的 SSE 通道：连接内自跑快节拍
+app.get('/api/time/sse', (c) => {
+  c.header('cache-control', 'no-cache, no-transform');
+  c.header('x-accel-buffering', 'no');
+
+  return streamSSE(c, async (stream) => {
+    await stream.writeSSE({ event: 'hello', retry: 1000, data: JSON.stringify({ t: Date.now() }) });
+
+    while (true) {
+      await stream.sleep(80);
+      await stream.writeSSE({
+        event: 'tick',
+        data: JSON.stringify({
+          t: Date.now(),
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offsetMinutes: -new Date().getTimezoneOffset(),
+        }),
+      });
+    }
+  });
+});
+
 app.get('/api/info', (c) =>
   c.json({
     node: 'cloudflare-workers',
@@ -112,6 +134,19 @@ function attachSession(server) {
         payload = JSON.parse(data);
       } catch {
         /* 非 JSON 文本，走普通回声 */
+      }
+
+      if (payload?.type === 'time') {
+        const tS = Date.now();
+        sendJSON({
+          type: 'time',
+          id: payload.id,
+          t0: payload.t0,
+          tS,
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          offsetMinutes: -new Date(tS).getTimezoneOffset(),
+        });
+        return;
       }
 
       if (payload?.type === 'ping') {

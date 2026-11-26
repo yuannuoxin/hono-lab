@@ -21,15 +21,20 @@
 
     <main class="wrap">
       <section class="hero" style="padding: 34px 0 4px">
-        <span class="eyebrow"><i class="dot"></i>NTP 式四时间戳 · 取最短往返</span>
+        <span class="eyebrow"><i class="dot"></i>NTP 式四时间戳 · 三种通道对比</span>
         <h1 style="font-size: clamp(24px, 3.4vw, 32px)">服务端时间 <span>偏移测量</span></h1>
-        <p>多次请求 <code class="mono">/api/time</code>，按 t0 / 服务器 t / t3 推算时钟偏差，然后沿用这个偏差跑一块服务器秒表。</p>
+        <p>同一个偏差算法，可以走 <code class="mono">HTTP</code>、<code class="mono">WebSocket</code> 或 <code class="mono">SSE</code> 三种通道采样，看往返与精度差多少。</p>
       </section>
 
       <div class="status">
         <span class="pill" id="syncState"><i class="dot"></i>未校准</span>
         <span class="mono dim" id="serverTz">tz —</span>
-        <label class="switch" style="margin-left: auto">
+        <div class="seg" id="channel" style="margin-left: auto">
+          <button type="button" data-channel="http" class="on">HTTP</button>
+          <button type="button" data-channel="ws">WebSocket</button>
+          <button type="button" data-channel="sse">SSE</button>
+        </div>
+        <label class="switch">
           <input type="checkbox" id="autoSync" checked />
           每 5s 自动重校
         </label>
@@ -49,7 +54,7 @@
       </div>
 
       <div class="card" style="margin-top: 14px">
-        <h3>采样明细 <span class="muted mono" style="font-weight: 400">t0 / tServer / t3 单位均为本机毫秒</span></h3>
+        <h3>采样明细 <span class="muted mono" style="font-weight: 400">t0 / tServer / t3 单位均为本机毫秒；SSE 通道没有 t0 与往返</span></h3>
         <div style="overflow: auto">
           <table>
             <thead>
@@ -72,12 +77,16 @@
       <section class="notes">
         <h3>偏差是怎么算的</h3>
         <p>
-          一次请求能拿到三个时刻：本机发出前 <code>t0</code>、服务器处理时的时间戳 <code>tS</code>、本机收到响应后 <code>t3</code>。
-          假设去程回程各占一半，服务器相对本机的偏差就是 <code>tS − (t0 + t3) / 2</code>。往返越长误差越大，所以采多次后取 <code>t3 − t0</code> 最小的那一次——它最接近"零延迟"的理想值。
+          一次往返能拿到三个时刻：本机发出前 <code>t0</code>、服务器处理时的时间戳 <code>tS</code>、本机收到响应后 <code>t3</code>。
+          假设去程回程各占一半，服务器相对本机的偏差就是 <code>tS − (t0 + t3) / 2</code>。往返越长误差越大，所以采多次后取 <code>t3 − t0</code> 最小的那一次。
+        </p>
+        <p>
+          三种通道的差别只在这三个时刻怎么拿到：<b>HTTP</b> 一次请求一个往返，最通用，但要付连接与代理的开销；<b>WebSocket</b> 在长连接上发一帧、回一帧，往返通常更小更稳，<code>tS</code> 也能干净地带回来；
+          <b>SSE</b> 只有下行，客户端根本发不出"我什么时候发的"，只能算 <code>tS − t3</code>，结果里含着服务端到客户端那一段单向延迟——所以它是偏差的<b>下限</b>，只适合看趋势，不适合精确校准。
         </p>
       </section>
 
-      <p class="footer">Hono · GET /api/time（响应头带 x-server-time）</p>
+      <p class="footer">Hono · GET /api/time / WS time 帧 / GET /api/time/sse</p>
     </main>
 
     <script src="/time.js"></script>
