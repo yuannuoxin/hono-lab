@@ -20,7 +20,7 @@
   const pad = (n, w = 2) => String(n).padStart(w, '0');
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  let channel = 'http';
+  let channel = 'ws';
   let offsetMs = 0;
   let bestRtt = null;
   let synced = false;
