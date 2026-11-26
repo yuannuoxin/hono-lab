@@ -120,6 +120,14 @@ npm run deploy       # 真正推到 Cloudflare
 - **SSE 每连接独立计时**：Workers 没有常驻进程，`/api/sse` 用 `stream.sleep(1000)` 在连接内循环推 `tick`，因此没有共享环形缓冲，断线不补发；`/api/sse/push` 与 `/api/sse/kick` 返回 `ok: false` 并在页面上提示不可用。
 - **`/api/info` 的字段**：`node` 固定 `cloudflare-workers`，`pid` / `port` 为 `null`；`uptimeMs` 按 isolate 内的 `STARTED` 估算，实例重启会归零。线上时区是 UTC，本地 miniflare 跟随本机时区。
 
+## 跨域：SSE 会被拦、WebSocket 不会
+
+- **WebSocket 不走同源策略**。握手是一次 HTTP Upgrade，但升级后的帧不受 CORS 管辖，浏览器也不会做预检；`Origin` 只是发给服务端自己判断，服务端不拒绝就能连。所以从任何页面连 `wss://hono-lab.mttd.ipv64.net/ws` 都不会报跨域。
+- **SSE 是一条普通 HTTP GET**（`text/event-stream`），走 fetch 的 `cors` 模式，响应没有 `Access-Control-Allow-Origin` 就被浏览器直接拦下。断线重连时浏览器还会带上 `Last-Event-ID`，这个头不在 CORS 安全列表里，会再触发一次预检。
+- 两套入口都挂了 `hono/cors`：放行 `*`、方法与 `Content-Type` / `Last-Event-ID`，并暴露 `x-server-time`。
+- `Access-Control-Allow-Origin: *` 不能和 `Access-Control-Allow-Credentials: true` 共存。如果要跨站带 Cookie 订阅，得把 origin 改成回显具体域名并显式允许凭据。
+- WebSocket 侧目前没有校验 `Origin`，等于任何站点都能连；真要对外，应在 `onOpen` 里比对 `c.req.header('Origin')` 或 `ws.raw` 的握手头。
+
 ## 已知边界
 
 - Node 侧 `serve()` 与 `injectWebSocket()` 必须按顺序调用，否则 `/ws` 会 404 或握手失败。

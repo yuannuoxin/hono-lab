@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { streamSSE } from 'hono/streaming';
+import { cors } from 'hono/cors';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,19 @@ const PAGES = {
 
 const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+
+// SSE 是普通 HTTP GET，跨源订阅要靠服务端放行；WebSocket 不吃这套，它自己校验 Origin
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    // 浏览器断线重连时会带 Last-Event-ID，它不在 CORS 安全列表里，必须显式放行
+    allowHeaders: ['Content-Type', 'Last-Event-ID'],
+    exposeHeaders: ['x-server-time'],
+    maxAge: 600,
+  }),
+);
 
 /* ---------------- 静态页面 ---------------- */
 

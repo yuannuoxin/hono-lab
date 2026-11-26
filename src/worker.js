@@ -1,9 +1,22 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { cors } from 'hono/cors';
 
 const STARTED = Date.now();
 
 const app = new Hono();
+
+// SSE 走普通 HTTP，跨源必须由服务端回 ACAO；WebSocket 不看这个，只认自己校验的 Origin
+app.use(
+  '*',
+  cors({
+    origin: '*',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Last-Event-ID'],
+    exposeHeaders: ['x-server-time'],
+    maxAge: 600,
+  }),
+);
 
 // 路径 → 静态文件，Workers 没有文件系统，统一走 ASSETS 绑定
 const PAGES = {
