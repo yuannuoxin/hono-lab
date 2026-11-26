@@ -84,7 +84,7 @@
         .then((r) => r.json())
         .then((info) => {
           document.getElementById('info-node').textContent = info.node;
-          document.getElementById('info-port').textContent = `port ${info.port}`;
+          document.getElementById('info-port').textContent = info.port ? `port ${info.port}` : 'workers · edge';
           document.getElementById('info-tz').textContent = info.tz;
           document.getElementById('info-up').textContent = `uptime ${fmtDur(info.uptimeMs)}`;
           document.getElementById('info-clock').textContent = new Date(info.clock).toLocaleString('zh-CN', { hour12: false });

@@ -86,6 +86,9 @@
       case 'hello':
         helloSeq = Number(data?.seq) || 0;
         if (typeof data?.clients === 'number') subsEl.textContent = `订阅 ${data.clients}`;
+        if (data?.buffered === false) {
+          log('warn', '… 当前是 Workers 版：每个连接独立计时，notice 广播与断线补发不可用');
+        }
         log(
           'sys',
           `← hello cid=${data?.cid} clients=${data?.clients} seq=${data?.seq}` +
@@ -173,7 +176,8 @@
         body: JSON.stringify({ text, burst }),
       });
       const json = await res.json();
-      log('out', `→ 已投递 ${json.ids.join(', ')}，当前订阅 ${json.clients}`);
+      if (json.ok) log('out', `→ 已投递 ${json.ids.join(', ')}，当前订阅 ${json.clients}`);
+      else log('warn', `… 推送未生效：${json.reason ?? '服务端拒绝'}`);
     } catch {
       log('error', '! 推送失败（服务未启动？）');
     }
@@ -187,7 +191,8 @@
     try {
       const res = await fetch('/api/sse/kick', { method: 'POST' });
       const json = await res.json();
-      log('sys', `… 已踢掉 ${json.kicked.length} 条流，等浏览器自己重连并带上 Last-Event-ID`);
+      if (json.ok) log('sys', `… 已踢掉 ${json.kicked.length} 条流，等浏览器自己重连并带上 Last-Event-ID`);
+      else log('warn', `… 掐流不可用：${json.reason ?? '服务端拒绝'}`);
     } catch {
       log('error', '! kick 失败');
     }

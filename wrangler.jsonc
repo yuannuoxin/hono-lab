@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hono-lab",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // 关掉「无扩展名路径自动找同名 .html」，否则 /ws 会被静态资源抢成 ws.html 文件
+    "html_handling": "none",
+    "not_found_handling": "none"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

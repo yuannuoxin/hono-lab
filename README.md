@@ -90,6 +90,36 @@ id: 116
 - `POST /api/sse/push`（body `{ "text": "...", "burst": 5 }`）广播自定义事件 `notice`；上行必须走普通请求，这是 SSE 与 WebSocket 的根本差别
 - `POST /api/sse/kick` 直接掐断所有流，用来实测「断线 → 自动重连 → 补发」
 
+## 部署到 Cloudflare Workers
+
+Node 版跑在本机，Workers 版是另写的一入口（`src/worker.js`），同一套 `public/` 静态资源，通过 `ASSETS` 绑定提供。
+
+新增/改动的文件：
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/worker.js` | Workers 入口：Hono + `WebSocketPair` 手动升级 + `streamSSE` + 静态资源兜底 |
+| `wrangler.jsonc` | 部署配置：`main`、`assets.directory`、`ASSETS` 绑定 |
+| `package.json` | 加了 `wrangler` 开发依赖和 `preview` / `deploy` / `deploy:dry` 脚本 |
+
+```bash
+npm run preview      # wrangler dev，本地模拟 Workers，默认 http://127.0.0.1:8787
+npm run deploy:dry   # 只打包不部署，产物在 dist/
+npx wrangler login   # 首次部署需要登录
+npm run deploy       # 真正推到 Cloudflare
+```
+
+部署后 `/`、`/websocket`、`/time`、`/sse`、`/api/*` 都在同一个 Worker 上；自定义域名在控制台加路由即可。
+
+### 与 Node 版的差异（重要）
+
+- **没有文件系统**：静态页走 `env.ASSETS.fetch()`，`/websocket` 这类别名由 Worker 映射到 `ws.html`。
+- **`html_handling` 必须设成 `none`**：默认的自动同名 `.html` 映射会把 `/ws` 当成静态文件 `ws.html` 直接返回 200，WebSocket 永远握手不上（本项目踩过这个坑）。
+- **WebSocket 用 `WebSocketPair` 手动升级**：`hono/cloudflare-workers` 的 `upgradeWebSocket` 在 Hono 4.13 已标 deprecated，直接 `server.accept()` + 返回 `101 + webSocket` 更稳。
+- **广播只在本实例内**：`clients` 是模块级 `Set`，Workers 会横向扩多个 isolate，跨实例推送要上 Durable Object；`setInterval` 也可能随实例回收停掉。
+- **SSE 每连接独立计时**：Workers 没有常驻进程，`/api/sse` 用 `stream.sleep(1000)` 在连接内循环推 `tick`，因此没有共享环形缓冲，断线不补发；`/api/sse/push` 与 `/api/sse/kick` 返回 `ok: false` 并在页面上提示不可用。
+- **`/api/info` 的字段**：`node` 固定 `cloudflare-workers`，`pid` / `port` 为 `null`；`uptimeMs` 按 isolate 内的 `STARTED` 估算，实例重启会归零。线上时区是 UTC，本地 miniflare 跟随本机时区。
+
 ## 已知边界
 
 - Node 侧 `serve()` 与 `injectWebSocket()` 必须按顺序调用，否则 `/ws` 会 404 或握手失败。
