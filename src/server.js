@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
+import { streamSSE } from 'hono/streaming';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,9 +21,11 @@ const PAGES = {
   '/': 'index.html',
   '/websocket': 'ws.html',
   '/time': 'time.html',
+  '/sse': 'sse.html',
   '/styles.css': 'styles.css',
   '/ws.js': 'ws.js',
   '/time.js': 'time.js',
+  '/sse.js': 'sse.js',
 };
 
 const app = new Hono();
@@ -156,12 +159,157 @@ app.get(
   })),
 );
 
+/* ---------------- SSE 测试端点 ---------------- */
+
+const sseClients = new Map(); // cid -> { write }
+let sseSeq = 0;
+const SSE_RING = [];
+const SSE_RING_MAX = 120;
+let sseTimer = null;
+let sseIdleTimer = null;
+
+function ssePush(event, payload) {
+  sseSeq += 1;
+  const record = { id: String(sseSeq), event, data: JSON.stringify(payload) };
+  SSE_RING.push(record);
+  if (SSE_RING.length > SSE_RING_MAX) SSE_RING.shift();
+
+  for (const [cid, client] of sseClients) {
+    client.write(record).catch(() => {
+      sseClients.delete(cid);
+    });
+  }
+  return record;
+}
+
+function ensureSseTimer() {
+  if (sseIdleTimer) {
+    clearTimeout(sseIdleTimer);
+    sseIdleTimer = null;
+  }
+  if (sseTimer) return;
+  sseTimer = setInterval(() => {
+    ssePush('tick', { t: Date.now(), clients: sseClients.size });
+  }, 1000);
+}
+
+// 最后一个人走光后再撑 15 秒，让重连期间漏掉的事件还能补发
+function scheduleSseIdleStop() {
+  if (sseClients.size || sseIdleTimer) return;
+  sseIdleTimer = setTimeout(() => {
+    sseIdleTimer = null;
+    if (sseClients.size || !sseTimer) return;
+    clearInterval(sseTimer);
+    sseTimer = null;
+  }, 15000);
+}
+
+app.get('/api/sse', (c) => {
+  const cid = Math.random().toString(36).slice(2, 8);
+  const lastId = c.req.header('last-event-id') ?? '';
+  const t0 = Date.now();
+
+  // 关掉各层缓冲，否则事件会被攒着一起吐出来
+  c.header('cache-control', 'no-cache, no-transform');
+  c.header('x-accel-buffering', 'no');
+
+  return streamSSE(c, async (stream) => {
+    const client = {
+      write: (record) => stream.writeSSE({ event: record.event, id: record.id, data: record.data }),
+      abort: () => stream.abort(),
+    };
+    sseClients.set(cid, client);
+    ensureSseTimer();
+
+    // hello 不带 id，避免把浏览器的 Last-Event-ID 基准顶到最新
+    await stream.writeSSE({
+      event: 'hello',
+      retry: 3000,
+      data: JSON.stringify({
+        cid,
+        clients: sseClients.size,
+        seq: sseSeq,
+        resumedFrom: lastId,
+        t: t0,
+      }),
+    });
+
+    // 浏览器重连时会自动带上 Last-Event-ID，按它把断线期间的事件补回去
+    if (lastId) {
+      const index = SSE_RING.findIndex((record) => record.id === lastId);
+      if (index >= 0) {
+        for (const record of SSE_RING.slice(index + 1)) {
+          await client.write(record);
+        }
+      } else {
+        await stream.writeSSE({
+          event: 'gap',
+          data: JSON.stringify({ lastId, seq: sseSeq, note: '这个 id 已经滚出缓冲区，补不回来了' }),
+        });
+      }
+    }
+
+    await new Promise((resolve) => {
+      stream.onAbort(() => resolve());
+    });
+
+    sseClients.delete(cid);
+    scheduleSseIdleStop();
+  });
+});
+
+app.post('/api/sse/push', async (c) => {
+  let text = '手动触发';
+  let burst = 1;
+  try {
+    const body = await c.req.json();
+    if (body?.text) text = String(body.text).slice(0, 200);
+    if (Number(body?.burst) > 1) burst = Math.min(Number(body.burst), 10);
+  } catch {
+    /* 没有 JSON body 就用默认文案 */
+  }
+
+  const ids = [];
+  for (let i = 0; i < burst; i += 1) {
+    const record = ssePush('notice', { text: burst > 1 ? `${text} (${i + 1}/${burst})` : text, t: Date.now() });
+    ids.push(record.id);
+  }
+
+  return c.json({ ok: true, ids, clients: sseClients.size, seq: sseSeq });
+});
+
+app.post('/api/sse/kick', (c) => {
+  const kicked = [];
+  for (const [cid, client] of sseClients) {
+    kicked.push(cid);
+    try {
+      client.abort();
+    } catch {
+      /* 已经断开的就跳过 */
+    }
+  }
+  sseClients.clear();
+  scheduleSseIdleStop();
+  return c.json({ ok: true, kicked });
+});
+
+app.get('/api/sse/info', (c) =>
+  c.json({
+    clients: sseClients.size,
+    seq: sseSeq,
+    ring: SSE_RING.length,
+    timer: Boolean(sseTimer),
+    subscriberIds: [...sseClients.keys()],
+  }),
+);
+
 /* ---------------- 启动 ---------------- */
 
 const server = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`hono-lab 已启动 → http://127.0.0.1:${info.port}`);
   console.log(`  WebSocket 测试  http://127.0.0.1:${info.port}/websocket`);
   console.log(`  服务端时间测试  http://127.0.0.1:${info.port}/time`);
+  console.log(`  SSE 测试       http://127.0.0.1:${info.port}/sse`);
 });
 
 injectWebSocket(server);

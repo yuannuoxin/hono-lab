@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SSE 测试 · Hono Lab</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <span class="logo">H</span>
+      <span class="brand">Hono Lab</span>
+      <span class="tag">/api/sse</span>
+      <nav>
+        <a href="/">首页</a>
+        <a href="/websocket">WebSocket</a>
+        <a href="/time">服务端时间</a>
+        <a href="/sse" aria-current="page">SSE</a>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <section class="hero" style="padding: 34px 0 4px">
+        <span class="eyebrow"><i class="dot"></i>text/event-stream · id · retry · Last-Event-ID</span>
+        <h1 style="font-size: clamp(24px, 3.4vw, 32px)">Server-Sent Events <span>单向推送测试</span></h1>
+        <p>
+          浏览器用 <code class="mono">EventSource</code> 订阅 <code class="mono">/api/sse</code>，服务端每秒推一次 <code class="mono">tick</code>，也能随时插入自定义 <code class="mono">notice</code>。
+          断线由浏览器自己按 <code class="mono">retry</code> 重连，并带上 <code class="mono">Last-Event-ID</code> 把漏掉的事件补回来。
+        </p>
+      </section>
+
+      <div class="status">
+        <span class="pill" id="state"><i class="dot"></i>未订阅</span>
+        <span class="mono dim" id="endpoint">—</span>
+        <span class="pill" id="subs" style="margin-left: auto">订阅 —</span>
+        <button class="btn" id="toggle">断开</button>
+      </div>
+
+      <div class="grid cols-3" style="margin-top: 14px">
+        <div class="stat"><label>已接收事件</label><b id="statRecv">0</b></div>
+        <div class="stat"><label style="text-transform: none">tick 事件</label><b id="statTick">0</b></div>
+        <div class="stat"><label style="text-transform: none">notice 事件</label><b id="statNotice">0</b></div>
+        <div class="stat"><label>自动重连次数</label><b id="statReconnect">0</b></div>
+        <div class="stat"><label style="text-transform: none">最后 event id</label><b id="statLastId" style="font-size: 17px">—</b></div>
+        <div class="stat"><label>在线时长</label><b id="statUp" style="font-size: 17px">—</b></div>
+      </div>
+
+      <div class="card" style="margin-top: 14px">
+        <div class="row">
+          <input type="text" id="pushText" value="来自浏览器的一条 notice" spellcheck="false" />
+          <button class="btn primary" id="push">推送 notice</button>
+          <button class="btn" id="burst">连推 5 条</button>
+          <button class="btn" id="kick">踢掉连接测续传</button>
+          <button class="btn" id="clear">清空日志</button>
+        </div>
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+
+      <section class="notes">
+        <h3>怎么读这页</h3>
+        <p>
+          每条事件都是 <code>event:</code> + <code>id:</code> + <code>data:</code> 三段，日志里的事件名就是 <code>event:</code> 字段。
+          点「踢掉连接测续传」，服务端主动掐断流，浏览器会在 <code>retry</code> 的 3 秒后自动重连，请求头里带上 <code>Last-Event-ID</code>，
+          服务端按它从 120 条环形缓冲里补发漏掉的 <code>tick</code> —— 日志里带 <code>↺</code> 的就是补发回来的。
+        </p>
+        <p>
+          上行只能另发一个普通请求（这里是 <code>POST /api/sse/push</code>）才能让服务端广播，这点和 WebSocket 的双向不同。
+          另外 HTTP/1.1 下同源最多 6 个并发连接，开太多 SSE 订阅会把同域的普通请求挤住。
+        </p>
+      </section>
+
+      <p class="footer">Hono streamSSE · 端点 GET /api/sse · 推送 POST /api/sse/push</p>
+    </main>
+
+    <script src="/sse.js"></script>
+  </body>
+</html>

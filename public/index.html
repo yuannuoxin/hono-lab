@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hono Lab · WebSocket 与时间测试台</title>
+    <title>Hono Lab · WebSocket / SSE / 时间测试台</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -15,19 +15,20 @@
         <a href="/" aria-current="page">首页</a>
         <a href="/websocket">WebSocket</a>
         <a href="/time">服务端时间</a>
+        <a href="/sse">SSE</a>
       </nav>
     </header>
 
     <main class="wrap">
       <section class="hero">
-        <span class="eyebrow"><i class="dot"></i>同一台服务器，两个诊断工具</span>
+        <span class="eyebrow"><i class="dot"></i>同一台服务器，三个诊断工具</span>
         <h1>用最直接的方式<br /><span>验证连接与时钟</span></h1>
         <p>
-          一个测 WebSocket：握手、回声、二进制帧、服务端主动推送。一个测时间：用 NTP 式的四时间戳估算服务器时钟偏移与本机偏差。
+          一个测 WebSocket：握手、回声、二进制帧、服务端主动推送。一个测时间：用 NTP 式的四时间戳估算服务器时钟偏移与本机偏差。一个测 SSE：单向事件流、自定义事件名与断线续传。
         </p>
       </section>
 
-      <div class="grid cols-2">
+      <div class="grid cols-3">
         <a class="card link" href="/websocket">
           <h2>WebSocket 测试 <span class="arrow">→</span></h2>
           <p class="muted">
@@ -43,6 +44,14 @@
           </p>
           <p class="muted mono" style="margin-top: 10px; color: #7dd3fc">GET /api/time</p>
         </a>
+
+        <a class="card link" href="/sse">
+          <h2>SSE 测试 <span class="arrow">→</span></h2>
+          <p class="muted">
+            订阅 <code class="mono">/api/sse</code>，看服务端每秒推 <code class="mono">tick</code>、随时插 <code class="mono">notice</code>，断线后靠 <code class="mono">Last-Event-ID</code> 续传。
+          </p>
+          <p class="muted mono" style="margin-top: 10px; color: #7dd3fc">GET /api/sse</p>
+        </a>
       </div>
 
       <div class="status">
@@ -54,14 +63,15 @@
       </div>
 
       <section class="notes">
-        <h3>这两个接口做什么</h3>
+        <h3>这几个接口做什么</h3>
         <p>
           <code>GET /api/time</code> 返回服务器毫秒时间戳、ISO 字符串、时区与进程运行时长，同时带 <code>x-server-time</code> 响应头；
-          <code>GET /api/info</code> 返回 Node 版本与进程信息；<code>GET /ws</code> 是 WebSocket 端点，收到 <code>{"type":"ping"}</code> 回 <code>pong</code>，其余文本原样回声，二进制帧原样回显。
+          <code>GET /api/info</code> 返回 Node 版本与进程信息；<code>GET /ws</code> 是 WebSocket 端点，收到 <code>{"type":"ping"}</code> 回 <code>pong</code>，其余文本原样回声，二进制帧原样回显；
+          <code>GET /api/sse</code> 是事件流，<code>POST /api/sse/push</code> 触发广播，<code>POST /api/sse/kick</code> 用来演示断线续传。
         </p>
       </section>
 
-      <p class="footer">Hono + @hono/node-server + @hono/node-ws · 无前端构建步骤</p>
+      <p class="footer">Hono + @hono/node-server + @hono/node-ws + streamSSE · 无前端构建步骤</p>
     </main>
 
     <script>

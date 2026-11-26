@@ -14,9 +14,13 @@ npm run dev      # node --watch，端口 3100
 | 路径 | 说明 |
 | --- | --- |
 | `/` | 首页，两页入口 + 服务信息 |
+| `/sse` | SSE 单向推送测试页 |
 | `/websocket` | WebSocket 测试页 |
 | `/time` | 服务端时间测试页 |
 | `/ws` | WebSocket 端点 |
+| `/api/sse` | SSE 事件流（`text/event-stream`） |
+| `/api/sse/push` | 手动触发一条/多条 `notice` 广播 |
+| `/api/sse/kick` | 掐断所有流，用来演示断线续传 |
 | `/api/time` | 服务器时间（JSON，含 `x-server-time` 响应头） |
 | `/api/info` | Node 版本、pid、端口、运行时长 |
 
@@ -25,6 +29,7 @@ npm run dev      # node --watch，端口 3100
 - **hono** 4.x
 - **@hono/node-server** 2.x（HTTP 服务）
 - **@hono/node-ws** 1.3.x（`createNodeWebSocket` + `injectWebSocket`）
+- **hono/streaming** 的 `streamSSE`（SSE）
 - 前端零依赖，样式手写在一个 `public/styles.css` 里
 
 ## WebSocket 端点协议
@@ -63,8 +68,30 @@ rtt    = t3 − t0
 
 取 `rtt` 最小的一次作为最终偏差（往返越短，中点假设越接近真实），然后用 `Date.now() + offset` 跑一块服务器秒表。同一台机器上实测偏差在 ±2 ms 内，往返 1–5 ms。
 
+## SSE 端点协议
+
+`GET /api/sse` 返回 `text/event-stream`，握手先发一条不带 `id` 的 `hello`，随后每秒推 `tick`（带自增 `id`）：
+
+```
+event: hello
+data: {"cid":"q2f5aj","clients":1,"seq":115,"resumedFrom":"","t":1795675292517}
+retry: 3000
+
+event: tick
+data: {"t":1795675293177,"clients":1}
+id: 116
+```
+
+- 服务端保留 **120 条**环形缓冲；浏览器重连会自动带上 `Last-Event-ID`，命中缓冲就把断线期间的事件按原 id 补发，命中不到则发一条 `event: gap`
+- `retry: 3000` 让浏览器自己 3 秒后重连，前端不用写重试逻辑
+- `hello` 故意不带 `id`，否则会把浏览器的续传基准顶到最新，补发就失效了
+- `POST /api/sse/push`（body `{ "text": "...", "burst": 5 }`）广播自定义事件 `notice`；上行必须走普通请求，这是 SSE 与 WebSocket 的根本差别
+- `POST /api/sse/kick` 直接掐断所有流，用来实测「断线 → 自动重连 → 补发」
+
 ## 已知边界
 
 - Node 侧 `serve()` 与 `injectWebSocket()` 必须按顺序调用，否则 `/ws` 会 404 或握手失败。
 - `@hono/node-ws@1.3` 的 peer 依赖是 `@hono/node-server@^2`，装成 1.x 会 ERESOLVE。
 - 时间偏移的精度受浏览器与服务端网络往返限制，跨机房时误差会放大到 RTT/2 量级；这不是 NTP，只适合做粗略校验。
+- SSE 必须关缓冲（响应头 `cache-control: no-cache, no-transform` + `x-accel-buffering: no`），否则中间层会把事件攒着一起吐；HTTP/1.1 下同源并发连接上限 6 个，订阅开太多会挤住同域普通请求。
+- `streamSSE` 的处理器要一直挂到客户端断开（本项目用 `stream.onAbort` 等 promise resolve），否则连接会被当成写完直接关掉。
