@@ -1,6 +1,6 @@
 # Hono Lab · WebSocket 与时间测试台
 
-一个 Hono（Node 运行时）小项目，带两个自测页面：**WebSocket 回声测试**和**服务端时间偏移测量**。没有前端构建步骤，页面是原生 HTML/CSS/JS。
+一个 Hono（Node 运行时）小项目，带三个自测页面：**WebSocket 回声测试**、**服务端时间偏移测量**和 **SSE 单向推送**。没有前端构建步骤，页面是原生 HTML/CSS/JS。
 
 ## 运行
 
@@ -13,7 +13,7 @@ npm run dev      # node --watch，端口 3100
 
 | 路径 | 说明 |
 | --- | --- |
-| `/` | 首页，两页入口 + 服务信息 |
+| `/` | 首页，三页入口 + 服务信息 |
 | `/sse` | SSE 单向推送测试页 |
 | `/websocket` | WebSocket 测试页 |
 | `/time` | 服务端时间测试页 |
@@ -50,6 +50,8 @@ npm run dev      # node --watch，端口 3100
 - 非 `ping` 的文本原样回收成 `{ "type": "echo", "t1": ..., "bytes": n, "data": "..." }`
 - 二进制帧原样回显，随后补一条 `{ "type": "echo-binary", "bytes": 32 }`
 - 所有连接关闭时停掉 `setInterval`，不空转
+
+页面上的地址栏可以填任意 `ws://` / `wss://`（只写域名会自动补 `ws://`，填 `https://` 会换成 `wss://`），默认连本机 `/ws`，上次连过的地址存在 `localStorage`。连第三方纯回声服务时没有 `hello` / `tick`，`ping` 会被原样吐回，页面按回包里的 `id` 认领算 RTT。实测可用的公共回声：`wss://ws.postman-echo.com/raw`、`wss://ws.ifelse.io`（后者连上会先发一条横幅文本）。
 
 ## 时间接口与偏差算法
 
@@ -95,3 +97,4 @@ id: 116
 - 时间偏移的精度受浏览器与服务端网络往返限制，跨机房时误差会放大到 RTT/2 量级；这不是 NTP，只适合做粗略校验。
 - SSE 必须关缓冲（响应头 `cache-control: no-cache, no-transform` + `x-accel-buffering: no`），否则中间层会把事件攒着一起吐；HTTP/1.1 下同源并发连接上限 6 个，订阅开太多会挤住同域普通请求。
 - `streamSSE` 的处理器要一直挂到客户端断开（本项目用 `stream.onAbort` 等 promise resolve），否则连接会被当成写完直接关掉。
+- 浏览器不许 https 页面连 `ws://`（混合内容），这类地址要换成 `wss://`；WebSocket API 也不暴露握手响应头，协商出的子协议与实际压缩扩展在页面上看不到。

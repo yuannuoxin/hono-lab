@@ -21,20 +21,30 @@
 
     <main class="wrap">
       <section class="hero" style="padding: 34px 0 4px">
-        <span class="eyebrow"><i class="dot"></i>Echo · Ping · Binary · Push</span>
+        <span class="eyebrow"><i class="dot"></i>Echo · Ping · Binary · Push · 任意第三方</span>
         <h1 style="font-size: clamp(24px, 3.4vw, 32px)">WebSocket <span>回声测试</span></h1>
-        <p>文本原样回声，<code class="mono">ping</code> 回 <code class="mono">pong</code> 并带回发送时刻，二进制帧原样回显。服务端每秒推送一次自身时间。</p>
+        <p>文本原样回声，<code class="mono">ping</code> 回 <code class="mono">pong</code> 并带回发送时刻，二进制帧原样回显。地址栏可以填任意 <code class="mono">ws://</code> / <code class="mono">wss://</code>，默认连本机的 <code class="mono">/ws</code>。</p>
       </section>
 
       <div class="status">
         <span class="pill" id="state"><i class="dot"></i>未连接</span>
-        <span class="mono dim" id="endpoint">—</span>
+        <div class="url-field">
+          <input type="text" id="urlInput" list="wsPresets" spellcheck="false" autocomplete="off" placeholder="ws:// 或 wss://" />
+          <datalist id="wsPresets">
+            <option value="ws://127.0.0.1:3100/ws">内置 /ws（本机 Hono）</option>
+            <option value="wss://ws.postman-echo.com/raw">Postman Echo（纯回声）</option>
+            <option value="wss://ws.ifelse.io">ifelse.io（回声 + 横幅）</option>
+          </datalist>
+        </div>
         <label class="switch" style="margin-left: auto">
           <input type="checkbox" id="autoReconnect" checked />
           自动重连
         </label>
-        <button class="btn" id="toggle">连接</button>
+        <button class="btn primary" id="toggle">连接</button>
       </div>
+      <p class="muted" style="font-size: 12px; margin: 8px 2px 0">
+        第三方回声服务只会原样吐回你发的内容，不会有 <code class="mono">hello</code> / <code class="mono">tick</code>；<code class="mono">ping</code> 靠比对回包里的 id 算 RTT。https 页面不能连 <code class="mono">ws://</code>（混合内容会被拦）。
+      </p>
 
       <div class="grid cols-3" style="margin-top: 14px">
         <div class="stat"><label>已发送</label><b id="statSent">0</b></div>
@@ -59,12 +69,16 @@
       <section class="notes">
         <h3>怎么读这页</h3>
         <p>
-          <code>平均 RTT</code> 只统计 ping/pong，用发送时刻和收到 pong 的本地时刻相减；<code>hello</code> 里的服务器时间可以直接和本机时间对比。
-          服务端每秒推 <code>{"type":"tick"}</code>，日志里出现的 <code>← tick</code> 就说明服务端主动下发链路是通的。
+          <code>平均 RTT</code> 只统计 ping：用发送时刻和收到应答的本地时刻相减。连本机 <code>/ws</code> 时服务端回 <code>pong</code> 并把 <code>t0</code> 带回来；
+          连第三方纯回声服务时，你发的 <code>{"type":"ping","id":...,"t0":...}</code> 会被原样吐回，页面按 id 认领并同样算出 RTT。
+        </p>
+        <p>
+          连上本机 <code>/ws</code> 后能额外看到服务端每秒推的 <code>tick</code> 与 <code>hello</code> 里的服务器时间；第三方没有这套协议，日志里就只有你自己发的东西的回声。
+          WebSocket API 不暴露握手响应头，所以这里看不到 <code>Sec-WebSocket-Protocol</code>、压缩扩展实际协商成了什么。
         </p>
       </section>
 
-      <p class="footer">Hono + @hono/node-ws · 端点 ws://127.0.0.1:3100/ws</p>
+      <p class="footer">Hono + @hono/node-ws · 默认端点 ws://127.0.0.1:3100/ws</p>
     </main>
 
     <script src="/ws.js"></script>
