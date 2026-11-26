@@ -26,6 +26,9 @@
   let synced = false;
   let calibrating = false;
   let autoTimer = null;
+  // 长连接只建一次，靠通道切换与页面卸载回收
+  let timeSocket = null;
+  let timeStream = null;
 
   /* ---------------- 三种采样通道 ---------------- */
 
@@ -47,7 +50,10 @@
     };
   }
 
-  async function withTimeSocket(run) {
+  async function ensureTimeSocket() {
+    if (timeSocket && timeSocket.readyState === WebSocket.OPEN) return timeSocket;
+
+    closeTimeSocket();
     const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
     const socket = new WebSocket(url);
 
@@ -63,15 +69,37 @@
       }, { once: true });
     });
 
+    timeSocket = socket;
+    socket.addEventListener('close', () => {
+      if (timeSocket === socket) timeSocket = null;
+    });
+    return socket;
+  }
+
+  function closeTimeSocket() {
+    if (!timeSocket) return;
     try {
-      return await run(socket);
-    } finally {
-      try {
-        socket.close();
-      } catch {
-        /* 已经关了 */
-      }
+      timeSocket.close();
+    } catch {
+      /* 已经关了 */
     }
+    timeSocket = null;
+  }
+
+  function ensureTimeStream() {
+    if (timeStream) return timeStream;
+    const stream = new EventSource('/api/time/sse');
+    stream.addEventListener('error', () => {
+      /* 浏览器按 retry 自己重连，连接对象不变 */
+    });
+    timeStream = stream;
+    return stream;
+  }
+
+  function closeTimeStream() {
+    if (!timeStream) return;
+    timeStream.close();
+    timeStream = null;
   }
 
   function sampleWsOnce(socket) {
@@ -113,21 +141,25 @@
     });
   }
 
-  function sampleSseRound(n) {
+  // 复用同一个 EventSource，只等接下来 n 个 tick，不重开连接
+  function collectSse(n, timeoutMs = 4000) {
+    const stream = ensureTimeStream();
+
     return new Promise((resolve, reject) => {
-      const stream = new EventSource('/api/time/sse');
       const rows = [];
 
-      const finish = (error) => {
+      const done = (fn) => {
         clearTimeout(timer);
-        stream.close();
-        if (error) reject(error);
-        else resolve(rows);
+        stream.removeEventListener('tick', onTick);
+        fn();
       };
 
-      const timer = setTimeout(() => finish(new Error(`只收到 ${rows.length}/${n} 个事件`)), 4000);
+      const timer = setTimeout(
+        () => done(() => reject(new Error(`只收到 ${rows.length}/${n} 个事件（连接可能在重连）`))),
+        timeoutMs,
+      );
 
-      stream.addEventListener('tick', (event) => {
+      function onTick(event) {
         let data = null;
         try {
           data = JSON.parse(event.data);
@@ -145,12 +177,10 @@
           // 没有 t0，只能算 tS − t3，结果里含着服务端→客户端的单向延迟
           offset: data.t - t3,
         });
-        if (rows.length >= n) finish();
-      });
+        if (rows.length >= n) done(() => resolve(rows));
+      }
 
-      stream.addEventListener('error', () => {
-        /* 浏览器自己会按 retry 重连，这里继续等事件 */
-      });
+      stream.addEventListener('tick', onTick);
     });
   }
 
@@ -218,16 +248,14 @@
           if (i < n - 1) await sleep(120);
         }
       } else if (channel === 'ws') {
-        round = await withTimeSocket(async (socket) => {
-          const rows = [];
-          for (let i = 0; i < n; i += 1) {
-            rows.push(await sampleWsOnce(socket));
-            if (i < n - 1) await sleep(120);
-          }
-          return rows;
-        });
+        // 复用同一条长连接，一个来回一帧，不重开握手
+        const socket = await ensureTimeSocket();
+        for (let i = 0; i < n; i += 1) {
+          round.push(await sampleWsOnce(socket));
+          if (i < n - 1) await sleep(120);
+        }
       } else {
-        round = await sampleSseRound(n);
+        round = await collectSse(n);
       }
     } catch (error) {
       stateEl.className = 'pill bad';
@@ -288,6 +316,12 @@
     samplesBody.innerHTML = '<tr><td colspan="6" class="dim" style="text-align: left">正在采样…</td></tr>';
     calibrateBtn.textContent = `重新校准（${COUNT[next]} 次采样）`;
 
+    // 离开对应通道就回收长连接，避免后台空转
+    if (next !== 'ws') closeTimeSocket();
+    if (next !== 'sse') closeTimeStream();
+    if (next === 'ws') ensureTimeSocket().catch(() => {});
+    if (next === 'sse') ensureTimeStream();
+
     while (calibrating) await sleep(100);
     calibrate();
   });
@@ -305,6 +339,12 @@
     if (!synced) return;
     renderClock();
   }, 60);
+
+  // 页面卸载时回收长连接，别让浏览器挂着半条流
+  window.addEventListener('pagehide', () => {
+    closeTimeSocket();
+    closeTimeStream();
+  });
 
   calibrate().then(() => {
     if (autoBox.checked) autoTimer = setInterval(() => calibrate(), 5000);
